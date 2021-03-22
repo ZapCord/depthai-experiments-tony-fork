@@ -1,3 +1,4 @@
+A fork of depthai-experiments mostly to modify the gen2-human-pose
 # depthai-experiments
 Experimental projects we've done with DepthAI.  
 
