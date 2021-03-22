@@ -10,11 +10,12 @@ from imutils.video import FPS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-nd', '--no-debug', action="store_true", help="Prevent debug output")
-parser.add_argument('-cam', '--camera', action="store_true", help="Use DepthAI 4K RGB camera for inference (conflicts with -vid)")
+parser.add_argument('-ccam', '--ccamera', action="store_true", help="Use DepthAI 4K RGB camera for inference (conflicts with -vid and -mcam)")
+parser.add_argument('-mcam', '--mcamera', action="store_true", help="Use DepthAI stereo cameras for inference (conflicts with -vid and -ccam)")
 parser.add_argument('-vid', '--video', type=str, help="Path to video file to be used for inference (conflicts with -cam)")
 args = parser.parse_args()
 
-if not args.camera and not args.video:
+if not args.ccamera and not args.video and not args.mcamera:
     raise RuntimeError("No source selected. Please use either \"-cam\" to use RGB camera as a source or \"-vid <path>\" to run on video")
 
 debug = not args.no_debug
@@ -37,30 +38,137 @@ def frame_norm(frame, bbox):
 def to_planar(arr: np.ndarray, shape: tuple) -> list:
     return cv2.resize(arr, shape).transpose(2,0,1).flatten()
 
+# The operations done here seem very CPU-intensive, TODO
+def convert_to_cv2_frame(name, image):
+    global last_rectif_right
+    baseline = 75 #mm
+    focal = right_intrinsic[0][0]
+    max_disp = 96
+    disp_type = np.uint8
+    disp_levels = 1
+    if (extended):
+        max_disp *= 2
+    if (subpixel):
+        max_disp *= 32;
+        disp_type = np.uint16  # 5 bits fractional disparity
+        disp_levels = 32
+
+    data, w, h = image.getData(), image.getWidth(), image.getHeight()
+    # TODO check image frame type instead of name
+    if name == 'rgb_preview':
+        frame = np.array(data).reshape((3, h, w)).transpose(1, 2, 0).astype(np.uint8)
+    elif name == 'rgb_video': # YUV NV12
+        yuv = np.array(data).reshape((h * 3 // 2, w)).astype(np.uint8)
+        frame = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_NV12)
+    elif name == 'depth':
+        # TODO: this contains FP16 with (lrcheck or extended or subpixel)
+        frame = np.array(data).astype(np.uint8).view(np.uint16).reshape((h, w))
+    elif name == 'disparity':
+        disp = np.array(data).astype(np.uint8).view(disp_type).reshape((h, w))
+
+        # Compute depth from disparity (32 levels)
+        with np.errstate(divide='ignore'): # Should be safe to ignore div by zero here
+            depth = (disp_levels * baseline * focal / disp).astype(np.uint16)
+
+        if 1: # Optionally, extend disparity range to better visualize it
+            frame = (disp * 255. / max_disp).astype(np.uint8)
+
+        if 1: # Optionally, apply a color map
+            frame = cv2.applyColorMap(frame, cv2.COLORMAP_HOT)
+            #frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
+
+        if pcl_converter is not None:
+            if 0: # Option 1: project colorized disparity
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pcl_converter.rgbd_to_projection(depth, frame_rgb, True)
+            else: # Option 2: project rectified right
+                pcl_converter.rgbd_to_projection(depth, last_rectif_right, False)
+            pcl_converter.visualize_pcd()
+
+    else: # mono streams / single channel
+        frame = np.array(data).reshape((h, w)).astype(np.uint8)
+        if name.startswith('rectified_'):
+            frame = cv2.flip(frame, 1)
+        if name == 'rectified_right':
+            last_rectif_right = frame
+    return frame
+
+
 
 def create_pipeline():
     print("Creating pipeline...")
     pipeline = dai.Pipeline()
 
-    if args.camera:
+    if args.ccamera:
         # ColorCamera
         print("Creating Color Camera...")
         cam = pipeline.createColorCamera()
+        cam_xout = pipeline.createXLinkOut()
+
         cam.setPreviewSize(456, 256)
         cam.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
         cam.setInterleaved(False)
         cam.setBoardSocket(dai.CameraBoardSocket.RGB)
-        cam_xout = pipeline.createXLinkOut()
+
         cam_xout.setStreamName("cam_out")
+
         cam.preview.link(cam_xout.input)
         controlIn = pipeline.createXLinkIn()
         controlIn.setStreamName('control')
         controlIn.out.link(cam.inputControl)
 
+    elif args.mcamera:
+        print("Creating Mono Cameras...")
+        cam_left   = pipeline.createMonoCamera()
+        cam_right  = pipeline.createMonoCamera()
+        # xout_left  = pipeline.createXLinkOut()
+        # xout_right = pipeline.createXLinkOut()
+
+        for cam in [cam_left, cam_right]: # Common config
+            cam.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
+            #cam.setFps(20.0)
+
+        cam_left .setBoardSocket(dai.CameraBoardSocket.LEFT)
+        manip_left = pipeline.createImageManip()
+        manip_left.initialConfig.setResize(456, 256)
+        manip_left.initialConfig.setFrameType(dai.RawImgFrame.Type.BGR888p)
+        #manip_left.setResize(456,256)
+        #manip_left.setKeepAspectRatio(True)
+        #manip_left.setFrameType(dai.RawImgFrame.Type.BGR888p)
+
+        cam_right.setBoardSocket(dai.CameraBoardSocket.RIGHT)
+        manip_right = pipeline.createImageManip()
+        manip_right.initialConfig.setResize(456, 256)
+        manip_right.initialConfig.setFrameType(dai.RawImgFrame.Type.BGR888p)
+        #manip_right.setResize(456,256)
+        #manip_right.setKeepAspectRatio(True)
+        #manip_right.setFrameType(dai.RawImgFrame.Type.BGR888p)
+
+        # xout_left .setStreamName('left')
+        # xout_right.setStreamName('right')
+
+        # manip_left .setStreamName('left')
+        # manip_right.setStreamName('right')
+
+        cam_left.out.link(manip_left.inputImage)
+        cam_right.out.link(manip_right.inputImage)
+        # cam_left.preview.link(xout_left.input)
+        # cam_right.preview.link(xout_right.input)
+        # cam_left.out.link(xout_left.input)
+        # cam_right.out.link(xout_right.input)
+
+        controlIn_left = pipeline.createXLinkIn()
+        controlIn_left.setStreamName('control_left')
+        controlIn_left.out.link(cam_left.inputControl)
+
+        controlIn_right = pipeline.createXLinkIn()
+        controlIn_right.setStreamName('control_right')
+        controlIn_right.out.link(cam_right.inputControl)
+
     # NeuralNetwork
     print("Creating Human Pose Estimation Neural Network...")
     pose_nn = pipeline.createNeuralNetwork()
-    if args.camera:
+    if args.ccamera or args.mcamera:
         pose_nn.setBlobPath(str(Path("models/human-pose-estimation-0001_openvino_2021.2_6shave.blob").resolve().absolute()))
     else:
         pose_nn.setBlobPath(str(Path("models/human-pose-estimation-0001_openvino_2021.2_8shave.blob").resolve().absolute()))
@@ -73,8 +181,20 @@ def create_pipeline():
     pose_nn_xout.setStreamName("pose_nn")
     pose_nn.out.link(pose_nn_xout.input)
 
-    if args.camera:
+    if args.ccamera:
         cam.preview.link(pose_nn.input)
+
+    elif args.mcamera:
+        # cam_left.out.link(pose_nn.input)
+        # cam_right.out.link(pose_nn.input)
+        xout_manip_left = pipeline.createXLinkOut()
+        xout_manip_left.setStreamName("left")
+        manip_left.out.link(pose_nn.input)
+
+        xout_manip_right = pipeline.createXLinkOut()
+        xout_manip_right.setStreamName("right")
+        manip_right.out.link(pose_nn.input)
+
     else:
         pose_in = pipeline.createXLinkIn()
         pose_in.setStreamName("pose_in")
@@ -108,7 +228,7 @@ class FPSHandler:
         self.ticks_cnt = {}
 
     def next_iter(self):
-        if not args.camera:
+        if args.video:
             frame_delay = 1.0 / self.framerate
             delay = (self.timestamp + frame_delay) - time.time()
             if delay > 0:
@@ -133,7 +253,7 @@ class FPSHandler:
         return self.frame_cnt / (self.timestamp - self.start)
 
 
-if args.camera:
+if args.ccamera or args.mcamera:
     fps = FPSHandler()
 else:
     cap = cv2.VideoCapture(str(Path(args.video).resolve().absolute()))
@@ -142,6 +262,8 @@ else:
 
 def pose_thread(in_queue):
     global keypoints_list, detected_keypoints, personwiseKeypoints
+    # w=456
+    # h=256
 
     while running:
         try:
@@ -181,7 +303,7 @@ def pose_thread(in_queue):
 with dai.Device(create_pipeline()) as device:
     print("Starting pipeline...")
     device.startPipeline()
-    if args.camera:
+    if args.ccamera:
         cam_out = device.getOutputQueue("cam_out", 1, True)
         controlQueue = device.getInputQueue('control')
     else:
@@ -197,6 +319,8 @@ with dai.Device(create_pipeline()) as device:
     def get_frame():
         if args.video:
             return cap.read()
+        elif args.mcamera:
+            return True, np.array(left.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
         else:
             return True, np.array(cam_out.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
 
@@ -212,7 +336,7 @@ with dai.Device(create_pipeline()) as device:
             h, w = frame.shape[:2]  # 256, 456
             debug_frame = frame.copy()
 
-            if not args.camera:
+            if args.video:
                 nn_data = dai.NNData()
                 nn_data.setLayer("input", to_planar(frame, (456, 256)))
                 pose_in.send(nn_data)
@@ -237,13 +361,13 @@ with dai.Device(create_pipeline()) as device:
             key = cv2.waitKey(1)
             if key == ord('q'):
                 break
-                
+
             elif key == ord('t'):
                 print("Autofocus trigger (and disable continuous)")
                 ctrl = dai.CameraControl()
                 ctrl.setAutoFocusMode(dai.CameraControl.AutoFocusMode.AUTO)
                 ctrl.setAutoFocusTrigger()
-                controlQueue.send(ctrl)            
+                controlQueue.send(ctrl)
 
     except KeyboardInterrupt:
         pass
@@ -252,5 +376,5 @@ with dai.Device(create_pipeline()) as device:
 
 t.join()
 print("FPS: {:.2f}".format(fps.fps()))
-if not args.camera:
+if args.video:
     cap.release()

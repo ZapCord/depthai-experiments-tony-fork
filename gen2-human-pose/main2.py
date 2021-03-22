@@ -7,8 +7,9 @@ import cv2
 import depthai as dai
 import numpy as np
 from imutils.video import FPS
-import sys
 
+print('Using depthai module from: ', dai.__file__)
+print('Depthai version installed: ', dai.__version__)
 
 ################################################################################
 # get arguments
