@@ -7,6 +7,7 @@ import cv2
 import depthai as dai
 import numpy as np
 from imutils.video import FPS
+import math
 
 print('Using depthai module from: ', dai.__file__)
 print('Depthai version installed: ', dai.__version__)
@@ -29,6 +30,13 @@ debug = not args.no_debug
 ################################################################################
 # function definitions
 ################################################################################
+"""
+gets angle based on 3 points where b is the center point between a and c.
+assumes segments are drawn between ab and bc
+"""
+def getAngle(a, b, c):
+    ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
+    return ang
 """
 flattening opencv arrays
 """
@@ -216,6 +224,8 @@ else:
     cap = cv2.VideoCapture(str(Path(args.video).resolve().absolute()))
     fps = FPSHandler(cap)
 
+keypointsMapping = ['Nose', 'Neck', 'R-Sho', 'R-Elb', 'R-Wr', 'L-Sho', 'L-Elb', 'L-Wr', 'R-Hip', 'R-Knee', 'R-Ank',
+                    'L-Hip', 'L-Knee', 'L-Ank', 'R-Eye', 'L-Eye', 'R-Ear', 'L-Ear']
 colors = [[0, 100, 255], [0, 100, 255], [0, 255, 255], [0, 100, 255], [0, 255, 255], [0, 100, 255], [0, 255, 0],
           [255, 200, 100], [255, 0, 255], [0, 255, 0], [255, 200, 100], [255, 0, 255], [0, 0, 255], [255, 0, 0],
           [200, 200, 0], [255, 0, 0], [200, 200, 0], [0, 0, 0]]
@@ -261,6 +271,10 @@ if args.ccamera or args.video:
             else:
                 return True, np.array(cam_out.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
 
+        angle_dict={}
+        eyes_list=[]
+        lkneeflex_list=[]
+        rkneeflex_list=[]
 
         try:
             while should_run():
@@ -279,10 +293,36 @@ if args.ccamera or args.video:
                     pose_in.send(nn_data)
 
                 if debug:
+                    pos_dict={}
                     if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
                         for i in range(18):
                             for j in range(len(detected_keypoints[i])):
                                 cv2.circle(debug_frame, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
+                                dict = {keypointsMapping[i]: detected_keypoints[i][j][0:2]}
+                                pos_dict.update(dict)
+
+                        if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
+                            eyes_list.append(angle)
+                            dict = {'Eyes': np.mean(eyes_list)}
+                            angle_dict.update(dict)
+                            print("Eyes Angle", angle)
+
+                        if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
+                            lkneeflex_list.append(angle)
+                            dict = {'LKneeFlex': np.mean(lkneeflex_list)}
+                            angle_dict.update(dict)
+                            print("Left Knee Flexion", angle)
+
+                        if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
+                            rkneeflex_list.append(angle)
+                            dict = {'RKneeFlex': np.mean(rkneeflex_list)}
+                            angle_dict.update(dict)
+                            print("Right Knee Flexion", angle)
+
+
                         for i in range(17):
                             for n in range(len(personwiseKeypoints)):
                                 index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
@@ -291,6 +331,14 @@ if args.ccamera or args.video:
                                 B = np.int32(keypoints_list[index.astype(int), 0])
                                 A = np.int32(keypoints_list[index.astype(int), 1])
                                 cv2.line(debug_frame, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
+                                delx = B[1]-B[0]
+                                dely = A[1]-A[0]
+                                # tempx = delx
+                                # tempy = dely
+                                # delx = B[1]-B[0]
+                                # dely = A[1]-A[0]
+                                #index=index.astype(int)
+                                #print(index,math.degrees(math.atan2(dely,delx)))
                     cv2.putText(debug_frame, f"RGB FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     cv2.putText(debug_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     cv2.imshow("rgb", debug_frame)
@@ -313,6 +361,8 @@ if args.ccamera or args.video:
 
     t.join()
     print("FPS: {:.2f}".format(fps.fps()))
+    for key in angle_dict.keys():
+        print("The average angle for",key,"is",angle_dict.get(key))
     if args.video:
         cap.release()
 
@@ -420,9 +470,14 @@ elif args.mcamera:
         confidences = []
         labels = []
 
+        angle_dict={}
+        eyes_list=[]
+        lkneeflex_list=[]
+        rkneeflex_list=[]
         try:
             right_frame=None
             # left_frame=None
+            pos_dict={}
             while should_run():
                 fps.next_iter()
                 #h, w = frame.shape[:2]
@@ -461,6 +516,30 @@ elif args.mcamera:
                         for i in range(18):
                             for j in range(len(detected_keypoints[i])):
                                 cv2.circle(debug_right_frame, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
+                                dict = {keypointsMapping[i]: detected_keypoints[i][j][0:2]}
+                                pos_dict.update(dict)
+
+                        if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
+                            eyes_list.append(angle)
+                            dict = {'Eyes': np.mean(eyes_list)}
+                            angle_dict.update(dict)
+                            print("Eyes Angle", angle)
+
+                        if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
+                            lkneeflex_list.append(angle)
+                            dict = {'LKneeFlex': np.mean(lkneeflex_list)}
+                            angle_dict.update(dict)
+                            print("Left Knee Flexion", angle)
+
+                        if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
+                            rkneeflex_list.append(angle)
+                            dict = {'RKneeFlex': np.mean(rkneeflex_list)}
+                            angle_dict.update(dict)
+                            print("Right Knee Flexion", angle)
+
                         for i in range(17):
                             for n in range(len(personwiseKeypoints)):
                                 index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
@@ -517,6 +596,8 @@ elif args.mcamera:
                     ctrl.setAutoFocusTrigger()
                     controlQueue.send(ctrl)
         except KeyboardInterrupt:
+            for key in angle_dict.keys():
+                print("The average angle for",key,"is",angle_dict.get(key))
             pass
         running = False
     t.join()
