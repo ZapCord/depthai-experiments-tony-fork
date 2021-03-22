@@ -237,12 +237,29 @@ with dai.Device(pipeline) as device:
             in_right = q_right.tryGet()
             in_nn_right = q_nn_right.tryGet()
 
+            # if there is a frame from the right stereo camera, keep it
             if in_right is not None:
                 shape = (3, in_right.getHeight(), in_right.getWidth())
                 right_frame = in_right.getData().reshape(shape).transpose(1, 2, 0).astype(np.uint8)
                 right_frame = np.ascontiguousarray(right_frame)
                 debug_right_frame = right_frame
 
+                # keep the opencv drawings even if the neural network
+                # has not updated
+                if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
+                    for i in range(18):
+                        for j in range(len(detected_keypoints[i])):
+                            cv2.circle(right_frame, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
+                    for i in range(17):
+                        for n in range(len(personwiseKeypoints)):
+                            index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
+                            if -1 in index:
+                                continue
+                            B = np.int32(keypoints_list[index.astype(int), 0])
+                            A = np.int32(keypoints_list[index.astype(int), 1])
+                            cv2.line(right_frame, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
+
+            # if there is a frame from neural network, use it to draw the frames
             if in_nn_right is not None:
                 if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
                     for i in range(18):
@@ -259,7 +276,8 @@ with dai.Device(pipeline) as device:
                     # cv2.putText(debug_right_frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     # cv2.putText(debug_right_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     # cv2.imshow("mono right", debug_right_frame)
-
+                    
+            # if there are frames, draw them in real time to the users
             if right_frame is not None:
                 cv2.putText(right_frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                 cv2.putText(right_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
