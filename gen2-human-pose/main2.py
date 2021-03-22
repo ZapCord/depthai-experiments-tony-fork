@@ -309,14 +309,14 @@ if args.ccamera or args.video:
                             print("Eyes Angle", angle)
 
                         if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))-180
                             lkneeflex_list.append(angle)
                             dict = {'LKneeFlex': np.mean(lkneeflex_list)}
                             angle_dict.update(dict)
                             print("Left Knee Flexion", angle)
 
                         if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))-180
                             rkneeflex_list.append(angle)
                             dict = {'RKneeFlex': np.mean(rkneeflex_list)}
                             angle_dict.update(dict)
@@ -527,14 +527,14 @@ elif args.mcamera:
                             print("Eyes Angle", angle)
 
                         if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))-180
                             lkneeflex_list.append(angle)
                             dict = {'LKneeFlex': np.mean(lkneeflex_list)}
                             angle_dict.update(dict)
                             print("Left Knee Flexion", angle)
 
                         if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))-180
                             rkneeflex_list.append(angle)
                             dict = {'RKneeFlex': np.mean(rkneeflex_list)}
                             angle_dict.update(dict)
