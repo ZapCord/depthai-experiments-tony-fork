@@ -91,11 +91,50 @@ def create_pipeline():
 """
 Pose function definitions from pose.py
 """
-def pose_thread(in_queue):
+def pose_thread1(in_queue):
+    global keypoints_list, detected_keypoints, personwiseKeypoints
+    while running:
+        try:
+            raw_in = in_queue.get()
+        except RuntimeError:
+            return
+        fps.tick('nn')
+        heatmaps = np.array(raw_in.getLayerFp16('Mconv7_stage2_L2')).reshape((1, 19, 32, 57))
+        pafs = np.array(raw_in.getLayerFp16('Mconv7_stage2_L1')).reshape((1, 38, 32, 57))
+        heatmaps = heatmaps.astype('float32')
+        pafs = pafs.astype('float32')
+        outputs = np.concatenate((heatmaps, pafs), axis=1)
+
+        new_keypoints = []
+        new_keypoints_list = np.zeros((0, 3))
+        keypoint_id = 0
+
+        for row in range(18):
+            probMap = outputs[0, row, :, :]
+            probMap = cv2.resize(probMap, (w, h))  # (456, 256)
+            keypoints = getKeypoints(probMap, 0.3)
+            new_keypoints_list = np.vstack([new_keypoints_list, *keypoints])
+            keypoints_with_id = []
+
+            for i in range(len(keypoints)):
+                keypoints_with_id.append(keypoints[i] + (keypoint_id,))
+                keypoint_id += 1
+
+            new_keypoints.append(keypoints_with_id)
+
+        valid_pairs, invalid_pairs = getValidPairs(outputs, w, h, new_keypoints)
+        newPersonwiseKeypoints = getPersonwiseKeypoints(valid_pairs, invalid_pairs, new_keypoints_list)
+
+        detected_keypoints, keypoints_list, personwiseKeypoints = (new_keypoints, new_keypoints_list, newPersonwiseKeypoints)
+
+
+"""
+Pose function definitions from pose.py with hardcoded width and height
+"""
+def pose_thread2(in_queue):
     global keypoints_list, detected_keypoints, personwiseKeypoints
     w=456
     h=256
-
     while running:
         try:
             raw_in = in_queue.get()
@@ -208,7 +247,7 @@ if args.ccamera or args.video:
         else:
             pose_in = device.getInputQueue("pose_in")
         pose_nn = device.getOutputQueue("pose_nn", 1, False)
-        t = threading.Thread(target=pose_thread, args=(pose_nn, ))
+        t = threading.Thread(target=pose_thread1, args=(pose_nn, ))
         t.start()
 
         def should_run():
@@ -218,8 +257,6 @@ if args.ccamera or args.video:
         def get_frame():
             if args.video:
                 return cap.read()
-            elif args.mcamera:
-                return True, np.array(left.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
             else:
                 return True, np.array(cam_out.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
 
@@ -369,9 +406,9 @@ elif args.mcamera:
         # q_nn_left = device.getOutputQueue("pose_nn_left", 1, blocking=False)
         q_right = device.getOutputQueue("right", 1, blocking=False)
         q_nn_right = device.getOutputQueue("pose_nn_right", 1, blocking=False)
-        t_right = threading.Thread(target=pose_thread, args=(q_nn_right, ))
+        t_right = threading.Thread(target=pose_thread2, args=(q_nn_right, ))
         t_right.start()
-        # t_left = threading.Thread(target=pose_thread, args=(q_nn_left, ))
+        # t_left = threading.Thread(target=pose_thread2, args=(q_nn_left, ))
         # t_left.start()
 
         def should_run():
