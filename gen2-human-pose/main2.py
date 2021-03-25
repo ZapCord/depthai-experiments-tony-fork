@@ -309,14 +309,14 @@ if args.ccamera or args.video:
                             print("Eyes Angle", angle)
 
                         if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))-180
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
                             lkneeflex_list.append(angle)
                             dict = {'LKneeFlex': np.mean(lkneeflex_list)}
                             angle_dict.update(dict)
                             print("Left Knee Flexion", angle)
 
                         if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
-                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))-180
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
                             rkneeflex_list.append(angle)
                             dict = {'RKneeFlex': np.mean(rkneeflex_list)}
                             angle_dict.update(dict)
@@ -331,14 +331,7 @@ if args.ccamera or args.video:
                                 B = np.int32(keypoints_list[index.astype(int), 0])
                                 A = np.int32(keypoints_list[index.astype(int), 1])
                                 cv2.line(debug_frame, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
-                                delx = B[1]-B[0]
-                                dely = A[1]-A[0]
-                                # tempx = delx
-                                # tempy = dely
-                                # delx = B[1]-B[0]
-                                # dely = A[1]-A[0]
-                                #index=index.astype(int)
-                                #print(index,math.degrees(math.atan2(dely,delx)))
+
                     cv2.putText(debug_frame, f"RGB FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     cv2.putText(debug_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     cv2.imshow("rgb", debug_frame)
@@ -378,9 +371,28 @@ elif args.mcamera:
     cam_right.setBoardSocket(dai.CameraBoardSocket.RIGHT)
     cam_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 
-    # cam_left = pipeline.createMonoCamera()
-    # cam_left.setBoardSocket(dai.CameraBoardSocket.LEFT)
-    # cam_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
+    cam_left = pipeline.createMonoCamera()
+    cam_left.setBoardSocket(dai.CameraBoardSocket.LEFT)
+    cam_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
+
+    #create a node to produce depth map using disparity output
+    depth = pipeline.createStereoDepth()
+    depth.setConfidenceThreshold(200)
+    # Options: MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7 (default)
+    # For depth filtering
+    median = dai.StereoDepthProperties.MedianFilter.KERNEL_7x7
+    depth.setMedianFilter(median)
+
+    # Better handling for occlusions:
+    depth.setLeftRightCheck(False)
+    # Closer-in minimum depth, disparity range is doubled:
+    depth.setExtendedDisparity(False)
+    # Better accuracy for longer distance, fractional disparity 32-levels:
+    depth.setSubpixel(False)
+
+    cam_left.out.link(depth.left)
+    cam_right.out.link(depth.right)
+
 
     # Define a neural network that will make predictions based on the source frames
     print("Creating Human Pose Estimation Neural Network...")
@@ -391,8 +403,6 @@ elif args.mcamera:
     elif args.mcamera:
         pose_nn_right = pipeline.createNeuralNetwork()
         pose_nn_right.setBlobPath(str(Path("models/human-pose-estimation-0001_openvino_2021.2_6shave.blob").resolve().absolute()))
-        # pose_nn_left = pipeline.createNeuralNetwork()
-        # pose_nn_left.setBlobPath(str(Path("models/human-pose-estimation-0001_openvino_2021.2_6shave.blob").resolve().absolute()))
     else:
         pose_nn.setBlobPath(str(Path("models/human-pose-estimation-0001_openvino_2021.2_8shave.blob").resolve().absolute()))
 
@@ -404,29 +414,27 @@ elif args.mcamera:
     cam_right.out.link(manip_right.inputImage)
     manip_right.out.link(pose_nn_right.input)
 
-    # manip_left = pipeline.createImageManip()
-    # manip_left.initialConfig.setResize(456, 256)
-    # # The NN model expects BGR input. By default ImageManip output type would be same as input (gray in this case)
-    # manip_left.initialConfig.setFrameType(dai.RawImgFrame.Type.BGR888p)
-    # cam_left.out.link(manip_left.inputImage)
-    # manip_left.out.link(pose_nn_left.input)
-
     controlIn_right = pipeline.createXLinkIn()
     controlIn_right.setStreamName('control_right')
     controlIn_right.out.link(cam_right.inputControl)
 
-    # controlIn_left = pipeline.createXLinkIn()
-    # controlIn_left.setStreamName('control_left')
-    # controlIn_left.out.link(cam_left.inputControl)
+    # Create disparity output
+    xout_manip_disparity = pipeline.createXLinkOut()
+    xout_manip_disparity.setStreamName("disparity")
+    depth.disparity.link(xout_manip_disparity.input)
+    # Create a node to convert the grayscale frame into the nn-acceptable form
+    # manip_disparity = pipeline.createImageManip()
+    # manip_disparity.initialConfig.setResize(456, 256)
 
+    # The NN model expects BGR input. By default ImageManip output type would be same as input (gray in this case)
+    # manip_disparity.initialConfig.setFrameType(dai.RawImgFrame.Type.BGR888p)
+    # cam_right.out.link(manip_disparity.inputImage)
+    # manip_disparity.out.link(pose_nn_right.input)
+    # manip_right.out.link(xout_manip_disparity.input)
     # Create outputs
     xout_manip_right = pipeline.createXLinkOut()
     xout_manip_right.setStreamName("right")
     manip_right.out.link(xout_manip_right.input)
-
-    # xout_manip_left = pipeline.createXLinkOut()
-    # xout_manip_left.setStreamName("left")
-    # manip_left.out.link(xout_manip_left.input)
 
     # Increase threads for detection
     pose_nn_right.setNumInferenceThreads(2)
@@ -437,15 +445,6 @@ elif args.mcamera:
     xout_nn_right.setStreamName("pose_nn_right")
     pose_nn_right.out.link(xout_nn_right.input)
 
-    # # Increase threads for detection
-    # pose_nn_left.setNumInferenceThreads(2)
-    # # Specify that network takes latest arriving frame in non-blocking manner
-    # pose_nn_left.input.setQueueSize(1)
-    # pose_nn_left.input.setBlocking(False)
-    # xout_nn_left = pipeline.createXLinkOut()
-    # xout_nn_left.setStreamName("pose_nn_left")
-    # pose_nn_left.out.link(xout_nn_left.input)
-
     # Pipeline defined, now the device is connected to
     with dai.Device(pipeline) as device:
         print("Starting pipeline...")
@@ -453,14 +452,11 @@ elif args.mcamera:
         device.startPipeline()
 
         # Output queues will be used to get the grayscale frames and nn data from the outputs defined above
-        # q_left = device.getOutputQueue("left", 1, blocking=False)
-        # q_nn_left = device.getOutputQueue("pose_nn_left", 1, blocking=False)
         q_right = device.getOutputQueue("right", 1, blocking=False)
         q_nn_right = device.getOutputQueue("pose_nn_right", 1, blocking=False)
+        q_disparity = device.getOutputQueue("disparity", 1, blocking=False)
         t_right = threading.Thread(target=pose_thread2, args=(q_nn_right, ))
         t_right.start()
-        # t_left = threading.Thread(target=pose_thread2, args=(q_nn_left, ))
-        # t_left.start()
 
         def should_run():
             return cap.isOpened() if args.video else True
@@ -476,17 +472,46 @@ elif args.mcamera:
         rkneeflex_list=[]
         try:
             right_frame=None
-            # left_frame=None
             pos_dict={}
             while should_run():
                 fps.next_iter()
                 #h, w = frame.shape[:2]
 
                 # instead of get (blocking) used tryGet (nonblocking) which will return the available data or None otherwise
-                # in_left = q_left.tryGet()
-                # in_nn_left = q_nn_left.tryGet()
                 in_right = q_right.tryGet()
                 in_nn_right = q_nn_right.tryGet()
+                inDepth = q_disparity.tryGet()  # blocking call, will wait until a new data has arrived
+
+                if inDepth is not None:
+                    #shape = (3, inDepth.getHeight(), inDepth.getWidth())
+                    # data is originally represented as a flat 1D array, it needs to be converted into HxW form
+                    # frame = inDepth.getData().reshape(shape).transpose(1, 2, 0).astype(np.uint8)
+                    frame = inDepth.getData().reshape((inDepth.getHeight(), inDepth.getWidth())).astype(np.uint8)
+                    frame = np.ascontiguousarray(frame)
+                    # frame is transformed, the color map will be applied to highlight the depth info
+                    frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
+                    # frame is ready to be shown
+
+
+                    # keep the opencv drawings even if the neural network
+                    # has not updated
+                    if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
+                        for i in range(18):
+                            for j in range(len(detected_keypoints[i])):
+                                x, y = detected_keypoints[i][j][0:2]
+                                x = int(x*1280/456)
+                                y = int(y*720/256)
+                                cv2.circle(frame, (x,y), 5, colors[i], -1, cv2.LINE_AA)
+                        for i in range(17):
+                            for n in range(len(personwiseKeypoints)):
+                                index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
+                                if -1 in index:
+                                    continue
+                                B = np.int32(keypoints_list[index.astype(int), 0])
+                                A = np.int32(keypoints_list[index.astype(int), 1])
+                                cv2.line(frame, (int(B[0]*1280/456), int(A[0]*1280/456)), (int(B[1]*720/256), int(A[1]*720/256)), colors[i], 3, cv2.LINE_AA)
+
+                    #cv2.imshow("disparity", frame)
 
                 # if there is a frame from the right stereo camera, keep it
                 if in_right is not None:
@@ -494,6 +519,7 @@ elif args.mcamera:
                     right_frame = in_right.getData().reshape(shape).transpose(1, 2, 0).astype(np.uint8)
                     right_frame = np.ascontiguousarray(right_frame)
                     debug_right_frame = right_frame
+
 
                     # keep the opencv drawings even if the neural network
                     # has not updated
@@ -548,9 +574,6 @@ elif args.mcamera:
                                 B = np.int32(keypoints_list[index.astype(int), 0])
                                 A = np.int32(keypoints_list[index.astype(int), 1])
                                 cv2.line(debug_right_frame, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
-                        # cv2.putText(debug_right_frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                        # cv2.putText(debug_right_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                        # cv2.imshow("mono right", debug_right_frame)
 
                 # if there are frames, draw them in real time to the users
                 if right_frame is not None:
@@ -558,33 +581,10 @@ elif args.mcamera:
                     cv2.putText(right_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
                     cv2.imshow("right mono", right_frame)
 
-                # if in_left is not None:
-                #     shape = (3, in_left.getHeight(), in_left.getWidth())
-                #     left_frame = in_left.getData().reshape(shape).transpose(1, 2, 0).astype(np.uint8)
-                #     left_frame = np.ascontiguousarray(left_frame)
-                #     debug_left_frame = left_frame
-                #
-                # if in_nn_left is not None:
-                #     if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
-                #         for i in range(18):
-                #             for j in range(len(detected_keypoints[i])):
-                #                 cv2.circle(debug_left_frame, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
-                #         for i in range(17):
-                #             for n in range(len(personwiseKeypoints)):
-                #                 index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
-                #                 if -1 in index:
-                #                     continue
-                #                 B = np.int32(keypoints_list[index.astype(int), 0])
-                #                 A = np.int32(keypoints_list[index.astype(int), 1])
-                #                 cv2.line(debug_left_frame, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
-                #         # cv2.putText(debug_left_frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                #         # cv2.putText(debug_left_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                #         # cv2.imshow("mono left", debug_left_frame)
-                #
-                # if left_frame is not None:
-                #     cv2.putText(left_frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                #     cv2.putText(left_frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                #     cv2.imshow("left mono", left_frame)
+                if frame is not None:
+                    cv2.putText(frame, f"MONO FPS: {round(fps.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
+                    cv2.putText(frame, f"NN FPS:  {round(fps.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
+                    cv2.imshow("disparity", frame)
 
 
                 if cv2.waitKey(1) == ord('q'):
