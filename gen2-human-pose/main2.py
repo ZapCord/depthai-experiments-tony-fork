@@ -8,6 +8,7 @@ import depthai as dai
 import numpy as np
 from imutils.video import FPS
 import math
+#from visualizer import initialize_OpenGL, get_vector_direction, get_vector_intersection, start_OpenGL
 
 print('Using depthai module from: ', dai.__file__)
 print('Depthai version installed: ', dai.__version__)
@@ -20,16 +21,110 @@ parser.add_argument('-nd', '--no-debug', action="store_true", help="Prevent debu
 parser.add_argument('-ccam', '--ccamera', action="store_true", help="Use DepthAI 4K RGB camera for inference (conflicts with -vid and -mcam)")
 parser.add_argument('-mcam', '--mcamera', action="store_true", help="Use DepthAI stereo cameras for inference (conflicts with -vid and -ccam)")
 parser.add_argument('-vid', '--video', type=str, help="Path to video file to be used for inference (conflicts with -cam)")
+parser.add_argument("-pcl", "--pointcloud", help="enables point cloud convertion and visualization for monocameras", default=False, action="store_true")
 args = parser.parse_args()
 
 if not args.ccamera and not args.video and not args.mcamera:
-    raise RuntimeError("No source selected. Please use either \"-cam\" to use RGB camera as a source or \"-vid <path>\" to run on video")
+    raise RuntimeError("No source selected. Please use either \"-ccam\" to use RGB camera as a source or \"-mcam\" to use mono cameras with depth as a source or \"-vid <path>\" to run on video")
 
 debug = not args.no_debug
+
+point_cloud = args.pointcloud # Create point cloud visualizer. Depends on 'out_rectified'
+
+if args.pointcloud:
+    # StereoDepth config options. TODO move to command line options
+    #source_camera  = not args.static_frames
+    out_depth      = False  # Disparity by default
+    out_rectified  = True   # Output and display rectified streams
+    lrcheck  = True   # Better handling for occlusions
+    extended = False  # Closer-in minimum depth, disparity range is doubled
+    subpixel = True   # Better accuracy for longer distance, fractional disparity 32-levels
+    # Options: MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7
+    median   = dai.StereoDepthProperties.MedianFilter.KERNEL_7x7
+    # Sanitize some incompatible options
+    if lrcheck or extended or subpixel:
+        median   = dai.StereoDepthProperties.MedianFilter.MEDIAN_OFF # TODO
+
+    print("StereoDepth config options:")
+    print("    Left-Right check:  ", lrcheck)
+    print("    Extended disparity:", extended)
+    print("    Subpixel:          ", subpixel)
+    print("    Median filtering:  ", median)
+    # TODO add API to read this from device / calib data
+    right_intrinsic = [[860.0, 0.0, 640.0], [0.0, 860.0, 360.0], [0.0, 0.0, 1.0]]
+    pcl_converter = None
+    if point_cloud:
+        if out_rectified:
+            try:
+                from projector_3d import PointCloudVisualizer
+            except ImportError as e:
+                raise ImportError(f"\033[1;5;31mError occured when importing PCL projector: {e}. Try disabling the point cloud \033[0m ")
+            pcl_converter = PointCloudVisualizer(right_intrinsic, 1280, 720)
+        else:
+            print("Disabling point-cloud visualizer, as out_rectified is not set")
+
 
 ################################################################################
 # function definitions
 ################################################################################
+"""
+convert image to cv2
+"""
+# The operations done here seem very CPU-intensive, TODO
+def convert_to_cv2_frame(name, image):
+    global last_rectif_right
+    baseline = 75 #mm
+    focal = right_intrinsic[0][0]
+    max_disp = 96
+    disp_type = np.uint8
+    disp_levels = 1
+    if (extended):
+        max_disp *= 2
+    if (subpixel):
+        max_disp *= 32;
+        disp_type = np.uint16  # 5 bits fractional disparity
+        disp_levels = 32
+
+    data, w, h = image.getData(), image.getWidth(), image.getHeight()
+    # TODO check image frame type instead of name
+    if name == 'rgb_preview':
+        frame = np.array(data).reshape((3, h, w)).transpose(1, 2, 0).astype(np.uint8)
+    elif name == 'rgb_video': # YUV NV12
+        yuv = np.array(data).reshape((h * 3 // 2, w)).astype(np.uint8)
+        frame = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_NV12)
+    elif name == 'depth':
+        # TODO: this contains FP16 with (lrcheck or extended or subpixel)
+        frame = np.array(data).astype(np.uint8).view(np.uint16).reshape((h, w))
+    elif name == 'disparity':
+        disp = np.array(data).astype(np.uint8).view(disp_type).reshape((h, w))
+
+        # Compute depth from disparity (32 levels)
+        with np.errstate(divide='ignore'): # Should be safe to ignore div by zero here
+            depth = (disp_levels * baseline * focal / disp).astype(np.uint16)
+
+        if 1: # Optionally, extend disparity range to better visualize it
+            frame = (disp * 255. / max_disp).astype(np.uint8)
+
+        if 1: # Optionally, apply a color map
+            frame = cv2.applyColorMap(frame, cv2.COLORMAP_HOT)
+            #frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
+
+        if pcl_converter is not None:
+            if 0: # Option 1: project colorized disparity
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pcl_converter.rgbd_to_projection(depth, frame_rgb, True)
+            else: # Option 2: project rectified right
+                pcl_converter.rgbd_to_projection(depth, last_rectif_right, False)
+            pcl_converter.visualize_pcd()
+
+    else: # mono streams / single channel
+        frame = np.array(data).reshape((h, w)).astype(np.uint8)
+        if name.startswith('rectified_'):
+            frame = cv2.flip(frame, 1)
+        if name == 'rectified_right':
+            last_rectif_right = frame
+    return frame
+
 """
 gets angle based on 3 points where b is the center point between a and c.
 assumes segments are drawn between ab and bc
@@ -37,6 +132,8 @@ assumes segments are drawn between ab and bc
 def getAngle(a, b, c):
     ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
     return ang
+
+
 """
 flattening opencv arrays
 """
@@ -95,6 +192,28 @@ def create_pipeline():
 
     print("Pipeline created.")
     return pipeline
+
+
+"""
+Return landmarks in 3D coordinates
+"""
+def get_landmark_3d(landmark):
+    focal_length = 842
+    landmark_norm = 0.5 - np.array(landmark)
+
+    # image size
+    landmark_image_coord = landmark_norm * 640
+
+    landmark_spherical_coord = [math.atan2(landmark_image_coord[0], focal_length),
+                                -math.atan2(landmark_image_coord[1], focal_length) + math.pi / 2]
+
+    landmarks_3D = [
+        math.sin(landmark_spherical_coord[1]) * math.cos(landmark_spherical_coord[0]),
+        math.sin(landmark_spherical_coord[1]) * math.sin(landmark_spherical_coord[0]),
+        math.cos(landmark_spherical_coord[1])
+    ]
+
+    return landmarks_3D
 
 
 """
@@ -377,18 +496,25 @@ elif args.mcamera:
 
     #create a node to produce depth map using disparity output
     depth = pipeline.createStereoDepth()
-    depth.setConfidenceThreshold(200)
+
+
     # Options: MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7 (default)
     # For depth filtering
     median = dai.StereoDepthProperties.MedianFilter.KERNEL_7x7
-    depth.setMedianFilter(median)
-
+    # depth.setOutputDepth(out_depth)
+    # depth.setOutputRectified(out_rectified)
+    depth.setConfidenceThreshold(200)
+    # depth.setRectifyEdgeFillColor(0)
+    # depth.setMedianFilter(median)
     # Better handling for occlusions:
     depth.setLeftRightCheck(False)
+    #depth.setLeftRightCheck(lrcheck)
     # Closer-in minimum depth, disparity range is doubled:
-    depth.setExtendedDisparity(False)
+    #depth.setExtendedDisparity(False)
+    #depth.setExtendedDisparity(extended)
     # Better accuracy for longer distance, fractional disparity 32-levels:
-    depth.setSubpixel(False)
+    depth.setExtendedDisparity(False)
+    #depth.setSubpixel(subpixel)
 
     cam_left.out.link(depth.left)
     cam_right.out.link(depth.right)
@@ -422,15 +548,7 @@ elif args.mcamera:
     xout_manip_disparity = pipeline.createXLinkOut()
     xout_manip_disparity.setStreamName("disparity")
     depth.disparity.link(xout_manip_disparity.input)
-    # Create a node to convert the grayscale frame into the nn-acceptable form
-    # manip_disparity = pipeline.createImageManip()
-    # manip_disparity.initialConfig.setResize(456, 256)
 
-    # The NN model expects BGR input. By default ImageManip output type would be same as input (gray in this case)
-    # manip_disparity.initialConfig.setFrameType(dai.RawImgFrame.Type.BGR888p)
-    # cam_right.out.link(manip_disparity.inputImage)
-    # manip_disparity.out.link(pose_nn_right.input)
-    # manip_right.out.link(xout_manip_disparity.input)
     # Create outputs
     xout_manip_right = pipeline.createXLinkOut()
     xout_manip_right.setStreamName("right")
@@ -470,6 +588,20 @@ elif args.mcamera:
         eyes_list=[]
         lkneeflex_list=[]
         rkneeflex_list=[]
+        if point_cloud:
+            global last_rectif_right
+            baseline = 75 #mm
+            focal = right_intrinsic[0][0]
+            max_disp = 96
+            disp_type = np.uint8
+            disp_levels = 1
+            if (extended):
+                max_disp *= 2
+            if (subpixel):
+                max_disp *= 32;
+                disp_type = np.uint16  # 5 bits fractional disparity
+                disp_levels = 32
+
         try:
             right_frame=None
             pos_dict={}
@@ -486,10 +618,25 @@ elif args.mcamera:
                     #shape = (3, inDepth.getHeight(), inDepth.getWidth())
                     # data is originally represented as a flat 1D array, it needs to be converted into HxW form
                     # frame = inDepth.getData().reshape(shape).transpose(1, 2, 0).astype(np.uint8)
+                    #frame = np.array(inDepth.getData()).astype(np.uint8).view(np.uint16).reshape((inDepth.getHeight(), inDepth.getWidth()))
+
                     frame = inDepth.getData().reshape((inDepth.getHeight(), inDepth.getWidth())).astype(np.uint8)
                     frame = np.ascontiguousarray(frame)
+                    if point_cloud:
+                        with np.errstate(divide='ignore'):
+                            dp = (disp_levels * baseline * focal / frame).astype(np.uint16)
+
+                        # if 1: # Optionally, extend disparity range to better visualize it
+                        #     frame = (frame * 255. / max_disp).astype(np.uint8)
+
+                        if pcl_converter is not None:
+                            #frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                            pcl_converter.rgbd_to_projection(dp, frame, False)
+                            pcl_converter.visualize_pcd()
+
                     # frame is transformed, the color map will be applied to highlight the depth info
                     frame = cv2.applyColorMap(frame, cv2.COLORMAP_JET)
+                    #frame = cv2.applyColorMap(frame, cv2.COLORMAP_HOT)
                     # frame is ready to be shown
 
 
