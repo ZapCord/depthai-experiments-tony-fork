@@ -530,7 +530,8 @@ if args.ccamera or args.video1:
 
                 h, w = frame.shape[:2]  # 256, 456
                 debug_frame = frame.copy()
-                debug_frame2 = frame2.copy()
+                if args.video2:
+                    debug_frame2 = frame2.copy()
 
                 if args.video1:
                     nn_data = dai.NNData()
