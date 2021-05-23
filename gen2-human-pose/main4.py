@@ -8,6 +8,10 @@ import depthai as dai
 import numpy as np
 from imutils.video import FPS
 import math
+import matplotlib.pyplot as plt
+import csv
+import os
+
 
 
 ################################################################################
@@ -49,6 +53,43 @@ def getAngle(a, b, c):
     ang = math.degrees(math.atan2(c[1]-b[1], c[0]-b[0]) - math.atan2(a[1]-b[1], a[0]-b[0]))
     return ang
 
+"""
+Plotting kinematic and kinetic data with norms and foot-offs
+"""
+def pplot(time, subplot_pos, left_norm, right_norm, title, xlabel, ylabel,
+dict, dictkey):
+# pplot(time, subplot_pos, left_norm, right_norm, title, xlabel, ylabel,
+# ylim_min, ylim_max, lfo_norm, rfo_norm, dict, dictkey):
+    if dict != None and dictkey != None:
+        vals = dict.get(dictkey)
+        tn2 = np.linspace(0, 100, len(vals[0]))
+        y2 = np.interp(time, tn2, vals[0])
+        ed = np.interp(time, tn2, vals[1])
+    plt.subplot(2, 1, subplot_pos)  # Layout 1 rows, 2 columns, position
+    plt.subplots_adjust(left=None, bottom=None,
+    right=None, top=None, wspace=0.5, hspace=0.5)
+
+    left_masked = np.ma.masked_where(left_norm < -360, left_norm)
+    right_masked = np.ma.masked_where(right_norm < -360, right_norm)
+    left_masked = np.ma.masked_where(left_masked > 360, left_masked)
+    right_masked = np.ma.masked_where(right_masked > 360, right_masked)
+
+    plot1 = plt.plot(time, left_masked, '#DC143C', time, right_masked, '#14C108')
+    plt.title(title,fontweight='bold')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    #plt.ylim(ylim_min, ylim_max)
+    plt.axhline(0, color='black')
+    # plt.axvline(lfo_norm,color='#DC143C',linewidth=1)
+    # plt.axvline(rfo_norm,color='#14C108',linewidth=1)
+    if dict !=None:
+        plt.errorbar(time,y2,ed,linestyle='None',marker=',',mfc="#B8B4B4",
+        mec="#B8B4B4",c="#B8B4B4",dash_capstyle='round')
+    plt.grid(color='#A2A2A2',which='major',axis='y',linestyle='-',linewidth='1')
+    plt.tick_params(axis='x',which='major',direction='in',
+    color='#A2A2A2',length=10)
+
+    return plot1
 
 """
 Old pipeline creation for color camera and video file input from
@@ -497,10 +538,12 @@ if args.ccamera or args.video1:
             else:
                 return True, np.array(cam_out.get().getData()).reshape((3, 256, 456)).transpose(1, 2, 0).astype(np.uint8)
 
-        angle_dict={}
+        angle_dict1={}
         eyes_list=[]
         lkneeflex_list=[]
         rkneeflex_list=[]
+        lhipflex_list=[]
+        rhipflex_list=[]
 
         try:
             count = 0
@@ -601,23 +644,62 @@ if args.ccamera or args.video1:
                         if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
                             angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
                             eyes_list.append(angle)
-                            dict = {'Eyes': np.mean(eyes_list)}
-                            angle_dict.update(dict)
+                            dict = {'EyesAvg': np.mean(eyes_list)}
+                            angle_dict1.update(dict)
+                            dict = {'Eyes': eyes_list}
+                            angle_dict1.update(dict)
                             print("Eyes Angle", angle)
+                        else:
+                            eyes_list.append(-1000)
+                            angle_dict1.update({'Eyes':eyes_list})
 
                         if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
                             angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
                             lkneeflex_list.append(angle)
-                            dict = {'LKneeFlex': np.mean(lkneeflex_list)}
-                            angle_dict.update(dict)
+                            dict = {'LKneeFlexAvg': np.mean(lkneeflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'LKneeFlex': lkneeflex_list}
+                            angle_dict1.update(dict)
                             print("Left Knee Flexion", angle)
+                        else:
+                            lkneeflex_list.append(-1000)
+                            angle_dict1.update({'LKneeFlex':lkneeflex_list})
 
                         if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
                             angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
                             rkneeflex_list.append(angle)
-                            dict = {'RKneeFlex': np.mean(rkneeflex_list)}
-                            angle_dict.update(dict)
+                            dict = {'RKneeFlexAvg': np.mean(rkneeflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'RKneeFlex': rkneeflex_list}
+                            angle_dict1.update(dict)
                             print("Right Knee Flexion", angle)
+                        else:
+                            rkneeflex_list.append(-1000)
+                            angle_dict1.update({'RKneeFlex':rkneeflex_list})
+
+                        if  'L-Sho' in pos_dict.keys() and 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Sho'), pos_dict.get('L-Hip'),pos_dict.get('L-Knee'))
+                            lhipflex_list.append(angle)
+                            dict = {'LHipFlexAvg': np.mean(lhipflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'LHipFlex': lhipflex_list}
+                            angle_dict1.update(dict)
+                            print("Left Hip Flexion", angle)
+                        else:
+                            lhipflex_list.append(-1000)
+                            angle_dict1.update({'LHipFlex':lhipflex_list})
+
+                        if  'R-Sho' in pos_dict.keys() and 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('R-Sho'), pos_dict.get('R-Hip'),pos_dict.get('R-Knee'))
+                            rhipflex_list.append(angle)
+                            dict = {'RHipFlexAvg': np.mean(rhipflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'RHipFlex': rhipflex_list}
+                            angle_dict1.update(dict)
+                            print("Right Hip Flexion", angle)
+                        else:
+                            rhipflex_list.append(-1000)
+                            angle_dict1.update({'RHipFlex':rhipflex_list})
 
 
                         for i in range(17):
@@ -656,8 +738,8 @@ if args.ccamera or args.video1:
 
             # t.join()
             # print("FPS: {:.2f}".format(fps.fps()))
-            for key in angle_dict.keys():
-                print("The average angle for",key,"is",angle_dict.get(key))
+            for key in angle_dict1.keys():
+                print("The average angle for",key,"is",angle_dict1.get(key))
             print(location_dict1)
             # cap.release()
 
@@ -666,10 +748,12 @@ if args.ccamera or args.video1:
             detected_keypoints = None
             personwiseKeypoints = None
 
-            angle_dict={}
+            angle_dict2={}
             eyes_list=[]
             lkneeflex_list=[]
             rkneeflex_list=[]
+            lhipflex_list=[]
+            rhipflex_list=[]
 
             if args.video2:
                 count = 0
@@ -760,24 +844,65 @@ if args.ccamera or args.video1:
                             if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
                                 angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
                                 eyes_list.append(angle)
-                                dict = {'Eyes': np.mean(eyes_list)}
-                                angle_dict.update(dict)
+                                dict = {'EyesAvg': np.mean(eyes_list)}
+                                angle_dict2.update(dict)
+                                dict = {'Eyes': eyes_list}
+                                angle_dict2.update(dict)
                                 print("Eyes Angle", angle)
+
+                            else:
+                                eyes_list.append(-1000)
+                                angle_dict2.update({'Eyes':eyes_list})
 
                             if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
                                 angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
                                 lkneeflex_list.append(angle)
-                                dict = {'LKneeFlex': np.mean(lkneeflex_list)}
-                                angle_dict.update(dict)
+                                dict = {'LKneeFlexAvg': np.mean(lkneeflex_list)}
+                                angle_dict2.update(dict)
+                                dict = {'LKneeFlex': lkneeflex_list}
+                                angle_dict2.update(dict)
                                 print("Left Knee Flexion", angle)
+
+                            else:
+                                lkneeflex_list.append(-1000)
+                                angle_dict2.update({'LKneeFlex':lkneeflex_list})
 
                             if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
                                 angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
                                 rkneeflex_list.append(angle)
-                                dict = {'RKneeFlex': np.mean(rkneeflex_list)}
-                                angle_dict.update(dict)
+                                dict = {'RKneeFlexAvg': np.mean(rkneeflex_list)}
+                                angle_dict2.update(dict)
+                                dict = {'RKneeFlex': rkneeflex_list}
+                                angle_dict2.update(dict)
                                 print("Right Knee Flexion", angle)
 
+                            else:
+                                rkneeflex_list.append(-1000)
+                                angle_dict2.update({'RKneeFlex':rkneeflex_list})
+
+                            if  'L-Sho' in pos_dict.keys() and 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys():
+                                angle = getAngle(pos_dict.get('L-Sho'), pos_dict.get('L-Hip'),pos_dict.get('L-Knee'))
+                                lhipflex_list.append(angle)
+                                dict = {'LHipFlexAvg': np.mean(lhipflex_list)}
+                                angle_dict2.update(dict)
+                                dict = {'LHipFlex': lhipflex_list}
+                                angle_dict2.update(dict)
+                                print("Left Hip Flexion", angle)
+                            else:
+                                lhipflex_list.append(-1000)
+                                angle_dict2.update({'LHipFlex':lhipflex_list})
+
+                            if  'R-Sho' in pos_dict.keys() and 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys():
+                                angle = getAngle(pos_dict.get('R-Sho'), pos_dict.get('R-Hip'),pos_dict.get('R-Knee'))
+                                rhipflex_list.append(angle)
+                                dict = {'RHipFlexAvg': np.mean(rhipflex_list)}
+                                angle_dict2.update(dict)
+                                dict = {'RHipFlex': rhipflex_list}
+                                angle_dict2.update(dict)
+                                print("Right Hip Flexion", angle)
+                            else:
+                                rhipflex_list.append(-1000)
+                                angle_dict2.update({'RHipFlex':rhipflex_list})
 
                             for i in range(17):
                                 for n in range(len(personwiseKeypoints)):
@@ -809,8 +934,8 @@ if args.ccamera or args.video1:
                         controlQueue.send(ctrl)
             # t.join() j
             # print("FPS: {:.2f}".format(fps.fps()))
-            # for key in angle_dict.keys():
-            #     print("The average angle for",key,"is",angle_dict.get(key))
+            # for key in angle_dict2.keys():
+            #     print("The average angle for",key,"is",angle_dict2.get(key))
             # cap2.release()
             disparity_x = []
             disparity_y = []
@@ -828,6 +953,8 @@ if args.ccamera or args.video1:
 
             print(disparity_x, disparity_y)
 
+
+
                 #print(len(location_dict1.get(key)[0]), len(location_dict2.get(key)[0]))
 
         except KeyboardInterrupt:
@@ -837,13 +964,88 @@ if args.ccamera or args.video1:
 
     t.join()
     print("FPS: {:.2f}".format(fps.fps()))
-    for key in angle_dict.keys():
-        print("The average angle for",key,"is",angle_dict.get(key))
+    for key in angle_dict2.keys():
+        print("The average angle for",key,"is",angle_dict2.get(key))
 
     print(location_dict2)
+    print(angle_dict1)
+    print(angle_dict2)
+
+    if args.video1:
+        name = args.video1
+        if os.name == "nt":
+            name = name.split('\\')
+            name = name[-1].split(".mp4")
+            name = name[0].split("_")
+        else:
+            name = name.split('/')
+            name = name[-1].split(".mp4")
+            name = name[0].split("_")
+
+        if name[2] == "S" and name[1][-1] == "L":
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
+            RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
+            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),90)
+            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),90)
+            title = "Sagittal Plane Kinematics"
+            subtitle1 = "Hip Flexion"
+            subtitle2 = "Knee Flexion"
+            YLabel1 = 'Ext     ($^\circ$)      Flex'
+            YLabel2 = 'Ext     ($^\circ$)      Flex'
+        elif name[2] == "S" and name[1][-1] == "R":
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)*-1
+            RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)*-1
+            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)
+            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)
+            title = "Sagittal Plane Kinematics"
+            subtitle1 = "Hip Flexion"
+            subtitle2 = "Knee Flexion"
+            YLabel1 = 'Ext     ($^\circ$)      Flex'
+            YLabel2 = 'Ext     ($^\circ$)      Flex'
+
+        # normalize for direction
+        elif name[2] == "C" and name[1][-1] == "L":
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
+            RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
+            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)
+            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)
+            title = "Coronal Plane Kinematics"
+            subtitle1 = "Hip Abd/adduction"
+            subtitle2 = "Knee Varus/Valgus"
+            YLabel1 = 'Abd     ($^\circ$)      Add'
+            YLabel2 = 'Val     ($^\circ$)      Var'
+        elif name[2] == "C" and name[1][-1] == "R":
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
+            RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
+            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)
+            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)
+            title = "Coronal Plane Kinematics"
+            subtitle1 = "Hip Abd/adduction"
+            subtitle2 = "Knee Varus/Valgus"
+            YLabel1 = 'Abd     ($^\circ$)      Add'
+            YLabel2 = 'Val     ($^\circ$)      Var'
+
+    NormTrialNamePNG = ''.join([name[1],"_",name[2],"_kinematics.png"])
+    NormGraphTitle = ' '.join([title, name[1], name[2]])
+    plt.figure(figsize=(14, 12))
+    #NormGraphTitle=' '.join([NormGraphTitle,"Left GC:",str(LFSActual),"Right GC:",str(RFSActual)])
+    plt.suptitle(NormGraphTitle, fontsize=12, fontweight="bold")
+
+    pplot(range(0,len(LHipFlex)),1,LHipFlex,
+    RHipFlex, subtitle1, "Time (frames)", YLabel1,
+    dict=None, dictkey=None)
+    pplot(range(0,len(LKneeFlex)),2,LKneeFlex,
+    RKneeFlex, subtitle2, "Time (frames)", YLabel2,
+    dict=None, dictkey=None)
+
+    plt.savefig(NormTrialNamePNG)
+    plt.close()
     # if args.video1:
     cap.release()
     cap2.release()
+
+
+
 
 # new pipeline for human pose utilizing right mono camera
 # TODO: add stereo depth by using other mono camera
