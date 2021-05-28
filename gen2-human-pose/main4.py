@@ -755,203 +755,197 @@ if args.ccamera or args.video1:
             lhipflex_list=[]
             rhipflex_list=[]
 
-            if args.video2:
-                count = 0
-                frame_count = 0
-                frame_stop = None
-                location_dict2 = {}
+            # if args.video2:
+            #     count = 0
+            #     frame_count = 0
+            #     frame_stop = None
+            #     location_dict2 = {}
+            #
+            #     while should_run2():
+            #         read_correctly2,frame2=cap2.read()
+            #         frame_count += 1
+            #
+            #         # restarting video so that the rest of the original video NN
+            #         # can finish running
+            #         if frame_count == cap2.get(cv2.CAP_PROP_FRAME_COUNT):
+            #             frame_count = 0
+            #             print("restarting video2")
+            #             cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            #             read_correctly2,frame2=cap2.read()
+            #
+            #         # stop the replayed video when it has done the
+            #         # amount of frames it skipped at beginning
+            #         if frame_stop is not None:
+            #             if frame_count==frame_stop:
+            #                 break
+            #
+            #         h, w = frame2.shape[:2]  # 256, 456
+            #         debug_frame2 = frame2.copy()
+            #
+            #         nn_data = dai.NNData()
+            #         nn_data.setLayer("input", to_planar(debug_frame2, (456, 256)))
+            #         pose_in.send(nn_data)
+            #
+            #
+            #         if debug:
+            #             pos_dict={}
+            #             if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
+            #                 if frame_stop is None:
+            #                     frame_stop = frame_count
+            #                 for i in range(18):
+            #                     for j in range(len(detected_keypoints[i])):
+            #                         cv2.circle(debug_frame2, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
+            #                         dict = {keypointsMapping[i]: detected_keypoints[i][j][0:2]}
+            #                         pos_dict.update(dict)
+            #
+            #                 for i in range(0,len(keypointsMapping)):
+            #                     if keypointsMapping[i] in pos_dict.keys():
+            #                         current_pos = pos_dict.get(keypointsMapping[i])
+            #
+            #                         if keypointsMapping[i] in location_dict2.keys():
+            #                             previous_pos = location_dict2.pop(keypointsMapping[i])
+            #                             previous_posx = previous_pos[0]
+            #                             previous_posy = previous_pos[1]
+            #
+            #                             if isinstance(previous_posx,list):
+            #                                 previous_posx.append(current_pos[0])
+            #                                 previous_posy.append(current_pos[1])
+            #                             else:
+            #                                 previous_posx = [previous_posx]
+            #                                 previous_posy = [previous_posy]
+            #                                 previous_posx.append(current_pos[0])
+            #                                 previous_posy.append(current_pos[1])
+            #
+            #                             dict = {keypointsMapping[i]: [previous_posx, previous_posy]}
+            #
+            #                         else:
+            #                             dict = {keypointsMapping[i]: [current_pos[0], current_pos[1]]}
+            #                     else:
+            #                         if keypointsMapping[i] in location_dict2.keys():
+            #                             previous_pos = location_dict2.pop(keypointsMapping[i])
+            #                             previous_posx = previous_pos[0]
+            #                             previous_posy = previous_pos[1]
+            #
+            #                             if isinstance(previous_posx,list):
+            #                                 previous_posx.append(-1)
+            #                                 previous_posy.append(-1)
+            #                             else:
+            #                                 previous_posx = [previous_posx]
+            #                                 previous_posy = [previous_posy]
+            #                                 previous_posx.append(-1)
+            #                                 previous_posy.append(-1)
+            #
+            #                             dict = {keypointsMapping[i]: [previous_posx, previous_posy]}
+            #
+            #                         else:
+            #                             dict = {keypointsMapping[i]: [-1, -1]}
+            #                     location_dict2.update(dict)
+            #
+            #                 if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
+            #                     angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
+            #                     eyes_list.append(angle)
+            #                     dict = {'EyesAvg': np.mean(eyes_list)}
+            #                     angle_dict2.update(dict)
+            #                     dict = {'Eyes': eyes_list}
+            #                     angle_dict2.update(dict)
+            #                     print("Eyes Angle", angle)
+            #
+            #                 else:
+            #                     eyes_list.append(-1000)
+            #                     angle_dict2.update({'Eyes':eyes_list})
+            #
+            #                 if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
+            #                     angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
+            #                     lkneeflex_list.append(angle)
+            #                     dict = {'LKneeFlexAvg': np.mean(lkneeflex_list)}
+            #                     angle_dict2.update(dict)
+            #                     dict = {'LKneeFlex': lkneeflex_list}
+            #                     angle_dict2.update(dict)
+            #                     print("Left Knee Flexion", angle)
+            #
+            #                 else:
+            #                     lkneeflex_list.append(-1000)
+            #                     angle_dict2.update({'LKneeFlex':lkneeflex_list})
+            #
+            #                 if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
+            #                     angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
+            #                     rkneeflex_list.append(angle)
+            #                     dict = {'RKneeFlexAvg': np.mean(rkneeflex_list)}
+            #                     angle_dict2.update(dict)
+            #                     dict = {'RKneeFlex': rkneeflex_list}
+            #                     angle_dict2.update(dict)
+            #                     print("Right Knee Flexion", angle)
+            #
+            #                 else:
+            #                     rkneeflex_list.append(-1000)
+            #                     angle_dict2.update({'RKneeFlex':rkneeflex_list})
+            #
+            #                 if  'L-Sho' in pos_dict.keys() and 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys():
+            #                     angle = getAngle(pos_dict.get('L-Sho'), pos_dict.get('L-Hip'),pos_dict.get('L-Knee'))
+            #                     lhipflex_list.append(angle)
+            #                     dict = {'LHipFlexAvg': np.mean(lhipflex_list)}
+            #                     angle_dict2.update(dict)
+            #                     dict = {'LHipFlex': lhipflex_list}
+            #                     angle_dict2.update(dict)
+            #                     print("Left Hip Flexion", angle)
+            #                 else:
+            #                     lhipflex_list.append(-1000)
+            #                     angle_dict2.update({'LHipFlex':lhipflex_list})
+            #
+            #                 if  'R-Sho' in pos_dict.keys() and 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys():
+            #                     angle = getAngle(pos_dict.get('R-Sho'), pos_dict.get('R-Hip'),pos_dict.get('R-Knee'))
+            #                     rhipflex_list.append(angle)
+            #                     dict = {'RHipFlexAvg': np.mean(rhipflex_list)}
+            #                     angle_dict2.update(dict)
+            #                     dict = {'RHipFlex': rhipflex_list}
+            #                     angle_dict2.update(dict)
+            #                     print("Right Hip Flexion", angle)
+            #                 else:
+            #                     rhipflex_list.append(-1000)
+            #                     angle_dict2.update({'RHipFlex':rhipflex_list})
+            #
+            #                 for i in range(17):
+            #                     for n in range(len(personwiseKeypoints)):
+            #                         index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
+            #                         if -1 in index:
+            #                             continue
+            #                         B = np.int32(keypoints_list[index.astype(int), 0])
+            #                         A = np.int32(keypoints_list[index.astype(int), 1])
+            #                         cv2.line(debug_frame2, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
+            #
+            #                 fps2.next_iter()
+            #
+            #                 cv2.putText(debug_frame2, f"MONO FPS: {round(fps2.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
+            #                 cv2.putText(debug_frame2, f"NN FPS:  {round(fps2.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
+            #                 cv2.imshow("mono2", debug_frame2)
+            #
+            #             count+=1
+            #             print(count)
+            #
+            #         key = cv2.waitKey(1)
+            #         if key == ord('q'):
+            #             break
+            #
+            #         elif key == ord('t'):
+            #             print("Autofocus trigger (and disable continuous)")
+            #             ctrl = dai.CameraControl()
+            #             ctrl.setAutoFocusMode(dai.CameraControl.AutoFocusMode.AUTO)
+            #             ctrl.setAutoFocusTrigger()
+            #             controlQueue.send(ctrl)
 
-                while should_run2():
-                    read_correctly2,frame2=cap2.read()
-                    frame_count += 1
-
-                    # restarting video so that the rest of the original video NN
-                    # can finish running
-                    if frame_count == cap2.get(cv2.CAP_PROP_FRAME_COUNT):
-                        frame_count = 0
-                        print("restarting video2")
-                        cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        read_correctly2,frame2=cap2.read()
-
-                    # stop the replayed video when it has done the
-                    # amount of frames it skipped at beginning
-                    if frame_stop is not None:
-                        if frame_count==frame_stop:
-                            break
-
-                    h, w = frame2.shape[:2]  # 256, 456
-                    debug_frame2 = frame2.copy()
-
-                    nn_data = dai.NNData()
-                    nn_data.setLayer("input", to_planar(debug_frame2, (456, 256)))
-                    pose_in.send(nn_data)
-
-
-                    if debug:
-                        pos_dict={}
-                        if keypoints_list is not None and detected_keypoints is not None and personwiseKeypoints is not None:
-                            if frame_stop is None:
-                                frame_stop = frame_count
-                            for i in range(18):
-                                for j in range(len(detected_keypoints[i])):
-                                    cv2.circle(debug_frame2, detected_keypoints[i][j][0:2], 5, colors[i], -1, cv2.LINE_AA)
-                                    dict = {keypointsMapping[i]: detected_keypoints[i][j][0:2]}
-                                    pos_dict.update(dict)
-
-                            for i in range(0,len(keypointsMapping)):
-                                if keypointsMapping[i] in pos_dict.keys():
-                                    current_pos = pos_dict.get(keypointsMapping[i])
-
-                                    if keypointsMapping[i] in location_dict2.keys():
-                                        previous_pos = location_dict2.pop(keypointsMapping[i])
-                                        previous_posx = previous_pos[0]
-                                        previous_posy = previous_pos[1]
-
-                                        if isinstance(previous_posx,list):
-                                            previous_posx.append(current_pos[0])
-                                            previous_posy.append(current_pos[1])
-                                        else:
-                                            previous_posx = [previous_posx]
-                                            previous_posy = [previous_posy]
-                                            previous_posx.append(current_pos[0])
-                                            previous_posy.append(current_pos[1])
-
-                                        dict = {keypointsMapping[i]: [previous_posx, previous_posy]}
-
-                                    else:
-                                        dict = {keypointsMapping[i]: [current_pos[0], current_pos[1]]}
-                                else:
-                                    if keypointsMapping[i] in location_dict2.keys():
-                                        previous_pos = location_dict2.pop(keypointsMapping[i])
-                                        previous_posx = previous_pos[0]
-                                        previous_posy = previous_pos[1]
-
-                                        if isinstance(previous_posx,list):
-                                            previous_posx.append(-1)
-                                            previous_posy.append(-1)
-                                        else:
-                                            previous_posx = [previous_posx]
-                                            previous_posy = [previous_posy]
-                                            previous_posx.append(-1)
-                                            previous_posy.append(-1)
-
-                                        dict = {keypointsMapping[i]: [previous_posx, previous_posy]}
-
-                                    else:
-                                        dict = {keypointsMapping[i]: [-1, -1]}
-                                location_dict2.update(dict)
-
-                            if 'Nose' in pos_dict.keys() and 'R-Eye' in pos_dict.keys() and 'L-Eye' in pos_dict.keys():
-                                angle = getAngle(pos_dict.get('L-Eye'),pos_dict.get('Nose'),pos_dict.get('R-Eye'))
-                                eyes_list.append(angle)
-                                dict = {'EyesAvg': np.mean(eyes_list)}
-                                angle_dict2.update(dict)
-                                dict = {'Eyes': eyes_list}
-                                angle_dict2.update(dict)
-                                print("Eyes Angle", angle)
-
-                            else:
-                                eyes_list.append(-1000)
-                                angle_dict2.update({'Eyes':eyes_list})
-
-                            if 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys() and 'L-Ank' in pos_dict.keys():
-                                angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Knee'),pos_dict.get('L-Ank'))
-                                lkneeflex_list.append(angle)
-                                dict = {'LKneeFlexAvg': np.mean(lkneeflex_list)}
-                                angle_dict2.update(dict)
-                                dict = {'LKneeFlex': lkneeflex_list}
-                                angle_dict2.update(dict)
-                                print("Left Knee Flexion", angle)
-
-                            else:
-                                lkneeflex_list.append(-1000)
-                                angle_dict2.update({'LKneeFlex':lkneeflex_list})
-
-                            if 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys() and 'R-Ank' in pos_dict.keys():
-                                angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Knee'),pos_dict.get('R-Ank'))
-                                rkneeflex_list.append(angle)
-                                dict = {'RKneeFlexAvg': np.mean(rkneeflex_list)}
-                                angle_dict2.update(dict)
-                                dict = {'RKneeFlex': rkneeflex_list}
-                                angle_dict2.update(dict)
-                                print("Right Knee Flexion", angle)
-
-                            else:
-                                rkneeflex_list.append(-1000)
-                                angle_dict2.update({'RKneeFlex':rkneeflex_list})
-
-                            if  'L-Sho' in pos_dict.keys() and 'L-Hip' in pos_dict.keys() and 'L-Knee' in pos_dict.keys():
-                                angle = getAngle(pos_dict.get('L-Sho'), pos_dict.get('L-Hip'),pos_dict.get('L-Knee'))
-                                lhipflex_list.append(angle)
-                                dict = {'LHipFlexAvg': np.mean(lhipflex_list)}
-                                angle_dict2.update(dict)
-                                dict = {'LHipFlex': lhipflex_list}
-                                angle_dict2.update(dict)
-                                print("Left Hip Flexion", angle)
-                            else:
-                                lhipflex_list.append(-1000)
-                                angle_dict2.update({'LHipFlex':lhipflex_list})
-
-                            if  'R-Sho' in pos_dict.keys() and 'R-Hip' in pos_dict.keys() and 'R-Knee' in pos_dict.keys():
-                                angle = getAngle(pos_dict.get('R-Sho'), pos_dict.get('R-Hip'),pos_dict.get('R-Knee'))
-                                rhipflex_list.append(angle)
-                                dict = {'RHipFlexAvg': np.mean(rhipflex_list)}
-                                angle_dict2.update(dict)
-                                dict = {'RHipFlex': rhipflex_list}
-                                angle_dict2.update(dict)
-                                print("Right Hip Flexion", angle)
-                            else:
-                                rhipflex_list.append(-1000)
-                                angle_dict2.update({'RHipFlex':rhipflex_list})
-
-                            for i in range(17):
-                                for n in range(len(personwiseKeypoints)):
-                                    index = personwiseKeypoints[n][np.array(POSE_PAIRS[i])]
-                                    if -1 in index:
-                                        continue
-                                    B = np.int32(keypoints_list[index.astype(int), 0])
-                                    A = np.int32(keypoints_list[index.astype(int), 1])
-                                    cv2.line(debug_frame2, (B[0], A[0]), (B[1], A[1]), colors[i], 3, cv2.LINE_AA)
-
-                            fps2.next_iter()
-
-                            cv2.putText(debug_frame2, f"MONO FPS: {round(fps2.fps(), 1)}", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                            cv2.putText(debug_frame2, f"NN FPS:  {round(fps2.tick_fps('nn'), 1)}", (5, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0))
-                            cv2.imshow("mono2", debug_frame2)
-
-                        count+=1
-                        print(count)
-
-                    key = cv2.waitKey(1)
-                    if key == ord('q'):
-                        break
-
-                    elif key == ord('t'):
-                        print("Autofocus trigger (and disable continuous)")
-                        ctrl = dai.CameraControl()
-                        ctrl.setAutoFocusMode(dai.CameraControl.AutoFocusMode.AUTO)
-                        ctrl.setAutoFocusTrigger()
-                        controlQueue.send(ctrl)
-            # t.join() j
-            # print("FPS: {:.2f}".format(fps.fps()))
-            # for key in angle_dict2.keys():
-            #     print("The average angle for",key,"is",angle_dict2.get(key))
-            # cap2.release()
-            disparity_x = []
-            disparity_y = []
-
-            for key in location_dict1:
-                mono1x,mono1y = location_dict1.get(key)
-                mono2x,mono2y = location_dict2.get(key)
-                for i in range(0,len(mono2x)):
-                    if mono2x[i] != -1 and mono1x[i] != -1:
-                        disparity_x.append(mono2x[i]-mono1x[i])
-                        disparity_y.append(mono2y[i]-mono1y[i])
-                    else:
-                        disparity_x.append(None)
-                        disparity_y.append(None)
-
-            print(disparity_x, disparity_y)
+            #
+            # for key in location_dict1:
+            #     mono1x,mono1y = location_dict1.get(key)
+            #     mono2x,mono2y = location_dict2.get(key)
+            #     for i in range(0,len(mono2x)):
+            #         if mono2x[i] != -1 and mono1x[i] != -1:
+            #             disparity_x.append(mono2x[i]-mono1x[i])
+            #             disparity_y.append(mono2y[i]-mono1y[i])
+            #         else:
+            #             disparity_x.append(None)
+            #             disparity_y.append(None)
+            #
+            # print(disparity_x, disparity_y)
 
 
 
@@ -962,14 +956,14 @@ if args.ccamera or args.video1:
 
         running = False
 
-    t.join()
-    print("FPS: {:.2f}".format(fps.fps()))
-    for key in angle_dict2.keys():
-        print("The average angle for",key,"is",angle_dict2.get(key))
+    # t.join()
+    # print("FPS: {:.2f}".format(fps.fps()))
+    # for key in angle_dict2.keys():
+    #     print("The average angle for",key,"is",angle_dict2.get(key))
 
-    print(location_dict2)
+    #print(location_dict2)
     print(angle_dict1)
-    print(angle_dict2)
+    #print(angle_dict2)
 
     if args.video1:
         name = args.video1
@@ -983,10 +977,10 @@ if args.ccamera or args.video1:
             name = name[0].split("_")
 
         if name[2] == "S" and name[1][-1] == "L":
-            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)*-1
             RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
-            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),90)
-            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),90)
+            LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)*-1
+            RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)*-1
             title = "Sagittal Plane Kinematics"
             subtitle1 = "Hip Flexion"
             subtitle2 = "Knee Flexion"
@@ -1040,9 +1034,39 @@ if args.ccamera or args.video1:
 
     plt.savefig(NormTrialNamePNG)
     plt.close()
+
+    Lhiploc = location_dict1.get("L-Hip")
+    Rhiploc = location_dict1.get("R-Hip")
+
+    hipcenterlocx = []
+    videofps = cap.get(cv2.CAP_PROP_FPS)
+    print("Frames per second using video.get(cv2.CAP_PROP_FPS) : {0}".format(videofps))
+
+    for i in range(0,len(Lhiploc[0])):
+        if Lhiploc[0][i] != -1 and Rhiploc[0][i] != -1:
+            hipcenterlocx.append(np.mean([Lhiploc[0][i],Rhiploc[0][i]]))
+        else:
+            hipcenterlocx.append(-1)
+
+    hipcenterlocy = []
+    for i in range(0,len(Lhiploc[1])):
+        if Lhiploc[1][i] != -1 and Rhiploc[1][i] != -1:
+            hipcenterlocx.append(np.mean([Lhiploc[1][i],Rhiploc[1][i]]))
+        else:
+            hipcenterlocx.append(-1)
+
+    indices = [i for i, (x, y) in enumerate(zip(hipcenterlocx,hipcenterlocx[1:])) if x == -1 and y!= -1]
+    if hipcenterlocx[0] != -1 and hipcenterlocx[-1] != -1:
+        velx = (hipcenterlocx[-1]-hipcenterlocx[0])/len(hipcenterlocx)*videofps
+    elif hipcenterlocx[0] == -1:
+        velx = (hipcenterlocx[-1]-hipcenterlocx[indices[0]+1])/(len(hipcenterlocx)-indices[0]+1)*videofps
+    elif hipcenterlocx[-1] == -1:
+        velx = (hipcenterlocx[indices[-1]-1]-hipcenterlocx[0])/(indices[-1]-1)*videofps
+    print("average velocity is in pixels/s", velx)
     # if args.video1:
     cap.release()
-    cap2.release()
+    #cap2.release()
+
 
 
 
