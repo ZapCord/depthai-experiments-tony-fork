@@ -1051,9 +1051,9 @@ if args.ccamera or args.video1:
     hipcenterlocy = []
     for i in range(0,len(Lhiploc[1])):
         if Lhiploc[1][i] != -1 and Rhiploc[1][i] != -1:
-            hipcenterlocx.append(np.mean([Lhiploc[1][i],Rhiploc[1][i]]))
+            hipcenterlocy.append(np.mean([Lhiploc[1][i],Rhiploc[1][i]]))
         else:
-            hipcenterlocx.append(-1)
+            hipcenterlocy.append(-1)
 
     indices = [i for i, (x, y) in enumerate(zip(hipcenterlocx,hipcenterlocx[1:])) if x == -1 and y!= -1]
     if hipcenterlocx[0] != -1 and hipcenterlocx[-1] != -1:
@@ -1062,11 +1062,23 @@ if args.ccamera or args.video1:
         velx = (hipcenterlocx[-1]-hipcenterlocx[indices[0]+1])/(len(hipcenterlocx)-indices[0]+1)*videofps
     elif hipcenterlocx[-1] == -1:
         velx = (hipcenterlocx[indices[-1]-1]-hipcenterlocx[0])/(indices[-1]-1)*videofps
-    print("average velocity is in pixels/s", velx)
+    print("average horizontal velocity in pixels/s", velx)
     # if args.video1:
     cap.release()
     #cap2.release()
-
+    ###########################################################################
+    # write hip centroid
+    ###########################################################################
+    CSVName = ''.join([name[1],"_",name[2],"_pelviscentroid.csv"])
+    with open(CSVName, 'w') as csvfile:
+        fieldnames = ['X','Y']
+        writer = csv.DictWriter(csvfile,fieldnames=fieldnames,delimiter=',')
+        writer.writeheader()
+        for i in range(0,len(hipcenterlocx)):
+            writer.writerow({
+            'X': hipcenterlocx[i],
+            'Y':hipcenterlocy[i]
+            })
 
 
 
