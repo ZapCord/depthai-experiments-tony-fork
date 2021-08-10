@@ -302,6 +302,8 @@ if args.video1:
         rkneeflex_list=[]
         lhipflex_list=[]
         rhipflex_list=[]
+        lshoflex_list=[]
+        rshoflex_list=[]
 
         try:
             count = 0
@@ -459,6 +461,30 @@ if args.video1:
                             rhipflex_list.append(-1000)
                             angle_dict1.update({'RHipFlex':rhipflex_list})
 
+                        if  'L-Sho' in pos_dict.keys() and 'L-Elb' in pos_dict.keys() and 'L-Hip' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('L-Hip'),pos_dict.get('L-Sho'), pos_dict.get('L-Elb'))
+                            lshoflex_list.append(angle)
+                            dict = {'LShoFlexAvg': np.mean(lshoflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'LShoFlex': lshoflex_list}
+                            angle_dict1.update(dict)
+                            print("Left Shoulder Flexion", angle)
+                        else:
+                            lshoflex_list.append(-1000)
+                            angle_dict1.update({'LShoFlex':lshoflex_list})
+
+                        if  'R-Sho' in pos_dict.keys() and 'R-Elb' in pos_dict.keys() and 'R-Hip' in pos_dict.keys():
+                            angle = getAngle(pos_dict.get('R-Hip'),pos_dict.get('R-Sho'), pos_dict.get('R-Elb'))
+                            rshoflex_list.append(angle)
+                            dict = {'RShoFlexAvg': np.mean(rshoflex_list)}
+                            angle_dict1.update(dict)
+                            dict = {'RShoFlex': rshoflex_list}
+                            angle_dict1.update(dict)
+                            print("Right Shoulder Flexion", angle)
+                        else:
+                            rshoflex_list.append(-1000)
+                            angle_dict1.update({'RShoFlex':rshoflex_list})
+
 
                         for i in range(17):
                             for n in range(len(personwiseKeypoints)):
@@ -580,9 +606,17 @@ if args.video1:
 
             NormTrialNamePNG = ''.join([name[1],"_",name[2],"_trajectories.png"])
             NormGraphTitle = ' '.join([title, name[1], name[2]])
+        if name[1] == "ohreachL" or name[1] == "ohreachR" and name[2] == "S":
+            LShoFlex = np.subtract(np.array(angle_dict1.get("LShoFlex")),180)
+            RShoFlex = np.subtract(np.array(angle_dict1.get("RShoFlex")),180)
+            title = "Sagittal Plane Kinematics"
+            subtitle1 = "Shoulder Flexion"
+            YLabel1 = 'Ext     ($^\circ$)      Flex'
+            NormTrialNamePNG = ''.join([name[1],"_",name[2],"_kinematics.png"])
+            NormGraphTitle = ' '.join([title, name[1], name[2]])
 
         elif name[2] == "S" and name[1][-1] == "L":
-            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)*-1
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
             RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
             LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)*-1
             RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)*-1
@@ -635,7 +669,7 @@ if args.video1:
 
         elif name[1] == "S2S" and name[2] == "S":
             print("Sit to stand protocol")
-            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)*-1
+            LHipFlex = np.subtract(np.array(angle_dict1.get("LHipFlex")),180)
             RHipFlex = np.subtract(np.array(angle_dict1.get("RHipFlex")),180)
             LKneeFlex = np.subtract(np.array(angle_dict1.get("LKneeFlex")),180)*-1
             RKneeFlex = np.subtract(np.array(angle_dict1.get("RKneeFlex")),180)*-1
@@ -649,7 +683,18 @@ if args.video1:
 
 
     #NormGraphTitle=' '.join([NormGraphTitle,"Left GC:",str(LFSActual),"Right GC:",str(RFSActual)])
-    if "kinematics" in NormTrialNamePNG:
+    if "ohreachL" or "ohreachR" in name[1]:
+        plt.figure(figsize=(14, 12))
+        plt.suptitle(NormGraphTitle, fontsize=12, fontweight="bold")
+
+        pplot(range(0,len(LShoFlex)),1,LShoFlex,
+        RShoFlex, subtitle1, "Time (frames)", YLabel1,
+        dict=None, dictkey=None)
+
+        plt.savefig(NormTrialNamePNG)
+        plt.close()
+
+    elif "kinematics" in NormTrialNamePNG:
         plt.figure(figsize=(14, 12))
         plt.suptitle(NormGraphTitle, fontsize=12, fontweight="bold")
 
